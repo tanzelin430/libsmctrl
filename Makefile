@@ -2,7 +2,7 @@ CC = gcc
 NVCC ?= nvcc
 # -fPIC is needed in all cases, as we may be linked into another shared library
 CFLAGS = -fPIC
-LDFLAGS = -lcuda -I/usr/local/cuda/include
+LDFLAGS = -lcuda -I/usr/local/cuda/include -ldl
 
 .PHONY: clean tests
 

@@ -2,6 +2,22 @@
  * Copyright 2023 Joshua Bakita
  * Library to control SM masks on CUDA launches. Co-opts preexisting debug
  * logic in the CUDA driver library, and thus requires a build with -lcuda.
+ *
+ * This file implements partitioning via three different mechanisms:
+ * - Modifying the QMD/TMD immediately prior to upload
+ * - Changing a field in CUDA's global struct that CUDA applies to the QMD/TMD
+ * - Changing a field in CUDA's stream struct that CUDA applies to the QMD/TMD
+ * This table shows the mechanism used with each CUDA version:
+ *   +-----------+---------------+---------------+--------------+
+ *   |  Version  |  Global Mask  |  Stream Mask  |  Next Mask   |
+ *   +-----------+---------------+---------------+--------------+
+ *   | 11.0-12.2 | TMD/QMD Hook  | stream struct | TMD/QMD Hook |
+ *   | 10.2      | global struct | stream struct | N/A          |
+ *   | 8.0-10.1  | N/A           | stream struct | N/A          |
+ *   +-----------+---------------+---------------+--------------+
+ * "N/A" indicates that a mask type is unsupported on that CUDA version.
+ * Please contact the authors if support is needed for a particular feature on
+ * an older CUDA version. Support for those is unimplemented, not impossible.
  */
 #include <cuda.h>
 
@@ -11,6 +27,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+
+#include <dlfcn.h>
 
 // In functions that do not return an error code, we favor terminating with an
 // error rather than merely printing a warning and continuing.
@@ -49,8 +67,12 @@ static void setup_g_sm_control_10() {
 	// `cudbgReportDriverApiErrorFlags` as our reference point. (This ends
 	// up being the closest to an intermediate table we use as part of our
 	// lookup---process discussed below.)
-	extern uint32_t cudbgReportDriverApiErrorFlags;
-	uint32_t* sym = &cudbgReportDriverApiErrorFlags;
+	//
+	// Unfortunately, the symbol we reference is errantly omitted from the
+	// libcuda.so stub used by nvcc starting around CUDA 11.8, so we have to
+	// use dlsym to avoid build-time issues.
+	void* hndl = dlopen(NULL, RTLD_LAZY);
+	uint32_t* sym = dlsym(hndl, "cudbgReportDriverApiErrorFlags");
 
 	// == Deriving Location:
 	// The number of CUDA devices available is co-located in the same CUDA
