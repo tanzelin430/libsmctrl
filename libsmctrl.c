@@ -30,6 +30,8 @@
 
 #include <dlfcn.h>
 
+#include "libsmctrl.h"
+
 // In functions that do not return an error code, we favor terminating with an
 // error rather than merely printing a warning and continuing.
 #define abort(ret, errno, ...) error_at_line(ret, errno, __FILE__, __LINE__, \
@@ -235,28 +237,48 @@ void libsmctrl_set_next_mask(uint64_t mask) {
 
 /*** Per-Stream SM Mask (unlikely to be forward-compatible) ***/
 
+// Offsets for the stream struct on x86_64
 #define CU_8_0_MASK_OFF 0xec
 #define CU_9_0_MASK_OFF 0x130
-#define CU_9_0_MASK_OFF_TX2 0x128 // CUDA 9.0 is slightly different on the TX2
 // CUDA 9.0 and 9.1 use the same offset
+// 9.1 tested on 390.157
 #define CU_9_2_MASK_OFF 0x140
-#define CU_10_0_MASK_OFF 0x24c
+#define CU_10_0_MASK_OFF 0x244
 // CUDA 10.0, 10.1 and 10.2 use the same offset
+// 10.1 tested on 418.113
+// 10.2 tested on 440.100, 440.82, 440.64, and 440.36
 #define CU_11_0_MASK_OFF 0x274
 #define CU_11_1_MASK_OFF 0x2c4
 #define CU_11_2_MASK_OFF 0x37c
 // CUDA 11.2, 11.3, 11.4, and 11.5 use the same offset
+// 11.4 tested on 470.223.02
 #define CU_11_6_MASK_OFF 0x38c
 #define CU_11_7_MASK_OFF 0x3c4
 #define CU_11_8_MASK_OFF 0x47c
+// 11.8 tested on 520.56.06
 #define CU_12_0_MASK_OFF 0x4cc
 // CUDA 12.0 and 12.1 use the same offset
+// 12.0 tested on 525.147.05
+#define CU_12_2_MASK_OFF 0x4e4
+// 12.2 tested on 535.129.03
 
-// Layout in CUDA's `stream` struct
+// Offsets for the stream struct on aarch64
+// All tested on Nov 13th, 2023
+#define CU_9_0_MASK_OFF_JETSON 0x128 // Tested on TX2
+#define CU_10_2_MASK_OFF_JETSON 0x24c // Tested on TX2 and Jetson Xavier
+#define CU_11_4_MASK_OFF_JETSON 0x394 // Tested on Jetson Orin
+
+// Used up through CUDA 11.8 in the stream struct
 struct stream_sm_mask {
 	uint32_t upper;
 	uint32_t lower;
-} __attribute__((packed));
+};
+
+// Used starting with CUDA 12.0 in the stream struct
+struct stream_sm_mask_v2 {
+	uint32_t enabled;
+	uint32_t mask[4];
+};
 
 // Check if this system has a Parker SoC (TX2/PX2 chip)
 // (CUDA 9.0 behaves slightly different on this platform.)
@@ -286,36 +308,29 @@ int detect_parker_soc() {
 }
 #endif // __aarch64__
 
-// Should work for CUDA 8.0 through 12.1
+// Should work for CUDA 8.0 through 12.2
 // A cudaStream_t is a CUstream*. We use void* to avoid a cuda.h dependency in
 // our header
 void libsmctrl_set_stream_mask(void* stream, uint64_t mask) {
+	uint128_t full_mask = -1;
+	full_mask <<= 64;
+	full_mask |= mask;
+	libsmctrl_set_stream_mask_ext(stream, full_mask);
+}
+
+void libsmctrl_set_stream_mask_ext(void* stream, uint128_t mask) {
 	char* stream_struct_base = *(char**)stream;
-	struct stream_sm_mask* hw_mask;
+	struct stream_sm_mask* hw_mask = NULL;
+	struct stream_sm_mask_v2* hw_mask_v2 = NULL;
 	int ver;
 	cuDriverGetVersion(&ver);
 	switch (ver) {
+#if __x86_64__
 	case 8000:
 		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_8_0_MASK_OFF);
 	case 9000:
 	case 9010: {
 		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_9_0_MASK_OFF);
-#if __aarch64__
-		// Jetson TX2 offset is slightly different on CUDA 9.0.
-		// Only compile the check into ARM64 builds.
-		int is_parker;
-		const char* err_str;
-		if ((is_parker = detect_parker_soc()) < 0) {
-			cuGetErrorName(-is_parker, &err_str);
-			fprintf(stderr, "libsmctrl_set_stream_mask: CUDA call "
-					"failed while doing compatibilty test."
-			                "Error, '%s'. Not applying stream "
-					"mask.\n", err_str);
-		}
-
-		if (is_parker)
-			hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_9_0_MASK_OFF_TX2);
-#endif
 		break;
 	}
 	case 9020:
@@ -349,25 +364,66 @@ void libsmctrl_set_stream_mask(void* stream, uint64_t mask) {
 		break;
 	case 12000:
 	case 12010:
-		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_12_0_MASK_OFF);
+		hw_mask_v2 = (void*)(stream_struct_base + CU_12_0_MASK_OFF);
 		break;
-	default: {
-		// For experimenting to determine the right mask offset, set the MASK_OFF
-		// environment variable (positive and negative numbers are supported)
-		char* mask_off_str = getenv("MASK_OFF");
-		fprintf(stderr, "libsmctrl: Stream masking unsupported on this CUDA version (%d)!\n", ver);
-		if (mask_off_str) {
-			int off = atoi(mask_off_str);
-			fprintf(stderr, "libsmctrl: Attempting offset %d on CUDA 12.1 base %#x "
-					"(total off: %#x)\n", off, CU_12_0_MASK_OFF, CU_12_0_MASK_OFF+off);
-			hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_12_0_MASK_OFF + off);
-		} else {
-			return;
-		}}
+	case 12020:
+		hw_mask_v2 = (void*)(stream_struct_base + CU_12_2_MASK_OFF);
+		break;
+#elif __aarch64__
+	case 9000: {
+		// Jetson TX2 offset is slightly different on CUDA 9.0.
+		// Only compile the check into ARM64 builds.
+		// TODO: Always verify Jetson-board-only on aarch64.
+		int is_parker;
+		const char* err_str;
+		if ((is_parker = detect_parker_soc()) < 0) {
+			cuGetErrorName(-is_parker, &err_str);
+			abort(1, 0, "While performing platform-specific "
+			            "compatibility checks for stream masking, "
+			            "CUDA call failed with error '%s'.", err_str);
+		}
+
+		if (!is_parker)
+			abort(1, 0, "Not supported on non-Jetson aarch64.");
+		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_9_0_MASK_OFF_JETSON);
+		break;
+	}
+	case 10020:
+		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_10_2_MASK_OFF_JETSON);
+		break;
+	case 11040:
+		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_11_4_MASK_OFF_JETSON);
+		break;
+#endif
 	}
 
-	hw_mask->upper = mask >> 32;
-	hw_mask->lower = mask;
+	// For experimenting to determine the right mask offset, set the MASK_OFF
+	// environment variable (positive and negative numbers are supported)
+	char* mask_off_str = getenv("MASK_OFF");
+	if (mask_off_str) {
+		int off = atoi(mask_off_str);
+		fprintf(stderr, "libsmctrl: Attempting offset %d on CUDA 12.2 base %#x "
+				"(total off: %#x)\n", off, CU_12_2_MASK_OFF, CU_12_2_MASK_OFF + off);
+		if (CU_12_2_MASK_OFF + off < 0)
+			abort(1, 0, "Total offset cannot be less than 0! Aborting...");
+		// +4 bytes to convert a mask found with this for use with hw_mask
+		hw_mask_v2 = (void*)(stream_struct_base + CU_12_2_MASK_OFF + off);
+	}
+
+	// Mask layout changed with CUDA 12.0 to support large Hopper/Ada GPUs
+	if (hw_mask) {
+		hw_mask->upper = mask >> 32;
+		hw_mask->lower = mask;
+	} else if (hw_mask_v2) {
+		hw_mask_v2->enabled = 1;
+		hw_mask_v2->mask[0] = mask;
+		hw_mask_v2->mask[1] = mask >> 32;
+		hw_mask_v2->mask[2] = mask >> 64;
+		hw_mask_v2->mask[3] = mask >> 96;
+	} else {
+		abort(1, 0, "Stream masking unsupported on this CUDA version (%d), and"
+		            " no fallback MASK_OFF set!", ver);
+	}
 }
 
 /* INFORMATIONAL FUNCTIONS */

@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+typedef unsigned __int128 uint128_t;
 
 /* PARTITIONING FUNCTIONS */
 
@@ -22,6 +23,7 @@ extern void libsmctrl_set_global_mask(uint64_t mask);
 // @param mask   A bitmask of enabled/disabled TPCs (see Notes on Bitmasks)
 // Supported: CUDA 8.0 - CUDA 12.1
 extern void libsmctrl_set_stream_mask(void* stream, uint64_t mask);
+extern void libsmctrl_set_stream_mask_ext(void* stream, uint128_t mask);
 // Set TPC mask for the next kernel launch from the caller's CPU thread
 // (overrides global and per-stream masks, applies only to next launch).
 // @param mask   A bitmask of enabled/disabled TPCs (see Notes on Bitmasks)
