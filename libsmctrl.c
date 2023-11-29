@@ -156,19 +156,29 @@ static uint64_t g_sm_mask = 0;
 static __thread uint64_t g_next_sm_mask = 0;
 static char sm_control_setup_called = 0;
 static void launchCallback(void *ukwn, int domain, int cbid, const void *in_params) {
-	if (*(uint32_t*)in_params < 0x50) {
-		fprintf(stderr, "Unsupported CUDA version for callback-based SM masking. Aborting...\n");
-		return;
-	}
-	if (!**((uintptr_t***)in_params+8)) {
-		fprintf(stderr, "Called with NULL halLaunchDataAllocation\n");
-		return;
-	}
-	//fprintf(stderr, "cta: %lx\n", *(uint64_t*)(**((char***)in_params + 8) + 74));
+	// The third 8-byte element in `in_parms` is a pointer to the stream struct.
+	// This exists even when in_params < 0x50. This could be used to implement
+	// stream masking without the manual offsets specified elsewhere (store a
+	// table of stream pointers to masks and do a lookup here).
+	// It could also be used (although not as easily) to support global and next
+	// masking on old CUDA versions, but that would require hooking earlier in the
+	// launch process (before the stream mask is applied).
+	if (*(uint32_t*)in_params < 0x50)
+		abort(1, 0, "Unsupported CUDA version for callback-based SM masking. Aborting...");
+	// The eighth 8-byte element in `in_params` is a pointer to a struct which
+	// contains a pointer to the TMD as its first element. Note that this eighth
+	// pointer must exist---it only exists when the first 8-byte element of
+	// `in_params` is at least 0x50 (checked above).
+	void* tmd = **((uintptr_t***)in_params + 8);
+	if (!tmd)
+		abort(1, 0, "TMD allocation appears NULL; likely forward-compatibilty issue.\n");
+
+	//fprintf(stderr, "cta: %lx\n", *(uint64_t*)(tmd + 74));
 	// TODO: Check for supported QMD version (>XXX, <4.00)
-	// TODO: Support QMD version 4 (Hopper), where offset starts at +304 (rather than +84) and is 72 bytes (rather than 8 bytes) wide
-	uint32_t *lower_ptr = (uint32_t*)(**((char***)in_params + 8) + 84);
-	uint32_t *upper_ptr = (uint32_t*)(**((char***)in_params + 8) + 88);
+	// TODO: Support QMD version 4 (Hopper), where offset starts at +304 (rather than +84) and is 16 bytes (rather than 8 bytes) wide. It also requires an enable bit at +31bits.
+	uint32_t *lower_ptr = tmd + 84;
+	uint32_t *upper_ptr = tmd + 88;
+
 	if (g_next_sm_mask) {
 		*lower_ptr = (uint32_t)g_next_sm_mask;
 		*upper_ptr = (uint32_t)(g_next_sm_mask >> 32);
@@ -198,13 +208,11 @@ static void setup_sm_control_11() {
 	enable = (typeof(enable))enable_func_addr;
 	int res = 0;
 	res = subscribe(&my_hndl, launchCallback, NULL);
-	if (res) {
-		fprintf(stderr, "libsmctrl: Error subscribing to launch callback. Error %d\n", res);
-		return;
-	}
+	if (res)
+		abort(1, 0, "Error subscribing to launch callback. CUDA returned error code %d.", res);
 	res = enable(1, my_hndl, LAUNCH_DOMAIN, LAUNCH_PRE_UPLOAD);
 	if (res)
-		fprintf(stderr, "libsmctrl: Error enabling launch callback. Error %d\n", res);
+		abort(1, 0, "Error enabling launch callback. CUDA returned error code %d.", res);
 }
 
 // Set default mask for all launches
