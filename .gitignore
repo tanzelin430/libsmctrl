@@ -4,7 +4,9 @@ libsmctrl.so
 libsmctrl_test_gpc_info
 libsmctrl_test_global_mask
 libsmctrl_test_stream_mask
+libsmctrl_test_stream_mask_override
 libsmctrl_test_next_mask
+libsmctrl_test_next_mask_override
 *.pyc
 *.o
 .gdb_history

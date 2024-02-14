@@ -87,7 +87,16 @@ int test_constrained_size_and_location(enum partitioning_type part_type) {
       case PARTITION_STREAM:
         libsmctrl_set_stream_mask_ext(stream, mask);
         break;
+      case PARTITION_STREAM_OVERRIDE:
+        libsmctrl_set_global_mask(~mask);
+        libsmctrl_set_stream_mask_ext(stream, mask);
+        break;
       case PARTITION_NEXT:
+        libsmctrl_set_next_mask(mask);
+        break;
+      case PARTITION_NEXT_OVERRIDE:
+        libsmctrl_set_global_mask(~mask);
+        libsmctrl_set_stream_mask_ext(stream, ~mask);
         libsmctrl_set_next_mask(mask);
         break;
       default:

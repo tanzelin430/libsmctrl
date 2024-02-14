@@ -26,12 +26,19 @@ libsmctrl_test_global_mask: libsmctrl_test_global_mask.c libsmctrl.a libsmctrl_t
 libsmctrl_test_stream_mask: libsmctrl_test_stream_mask.c libsmctrl.a libsmctrl_test_mask_shared.o
 	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
+libsmctrl_test_stream_mask_override: libsmctrl_test_stream_mask_override.c libsmctrl.a libsmctrl_test_mask_shared.o
+	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+
 libsmctrl_test_next_mask: libsmctrl_test_next_mask.c libsmctrl.a libsmctrl_test_mask_shared.o
 	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
-tests: libsmctrl_test_gpc_info libsmctrl_test_global_mask libsmctrl_test_stream_mask libsmctrl_test_next_mask
+libsmctrl_test_next_mask_override: libsmctrl_test_next_mask_override.c libsmctrl.a libsmctrl_test_mask_shared.o
+	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+
+tests: libsmctrl_test_gpc_info libsmctrl_test_global_mask libsmctrl_test_stream_mask libsmctrl_test_stream_mask_override libsmctrl_test_next_mask libsmctrl_test_next_mask_override
 
 clean:
 	rm -f libsmctrl.so libsmctrl.a libsmctrl_test_gpu_info \
 	      libsmctrl_test_mask_shared.o libmsctrl_test_global_mask \
-	      libsmctrl_test_stream_mask libmsctrl_test_next_mask
+	      libsmctrl_test_stream_mask libmsctrl_test_stream_mask_override \
+	      libsmctrl_test_next_mask libmsctrl_test_next_mask_override

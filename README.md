@@ -44,7 +44,8 @@ And if `nvdebug` has been installed:
 
 #### Known Issues
 
-- `next_mask` will not override `stream_mask` on CUDA 12.0+
+- `next_mask` will not override `stream_mask` on CUDA 11.0+
+    - _As of Feb 2024, a fix for this is coming soon..._
 - `global_mask` and `next_mask` cannot disable TPCs with IDs above 128
     - Only relevant on GPUs with over 128 TPCs, such as the RTX 6000 Ada
 - Untested on H100 (compute capability 9.0)
@@ -74,7 +75,3 @@ How this works:
 3. If the test succeeded (returned zero) the loop aborts, otherwise it increments the offset to attempt and repeats.
 
 Once this loop aborts, take the found offset and add it into the switch statement for the appropriate CUDA version and CPU architecture.
-
-## TODO
-
-- Add a test to check that more-granularly-set compute masks override more-corsely-set ones.
