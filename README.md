@@ -20,6 +20,52 @@ Please cite this paper in any work which leverages our library. Here's the BibTe
 Please see [the paper](https://www.cs.unc.edu/~jbakita/rtas23.pdf) and libsmctrl.h for details and examples of how to use this library.
 We strongly encourage consulting those resources first; the below comments serve merely as an appendum.
 
+## Run-time Dependencies
+`libcuda.so`, which is automatically installed by the NVIDIA GPU driver.
+
+## Building
+To build, ensure that you have `gcc` installed and access to the CUDA SDK including `nvcc`. Then run:
+```
+make libsmctrl.a
+```
+
+If you see an error that the command `nvcc` was not found, `nvcc` is not available on your `PATH`.
+Correct this error by explictly specifying the location of `nvcc` to `make`, e.g.:
+```
+make NVCC=/playpen/jbakita/CUDA/cuda-archive/cuda-10.2/bin/nvcc libsmctrl.a
+```
+
+For binary backwards-compatibility to old versions of the NVIDIA GPU driver, we recommend building with an old version of the CUDA SDK.
+For example, by building against CUDA 10.2, the binary will be compatible with any version of the NVIDIA GPU driver newer than 440.36 (Nov 2019), but by building against CUDA 8.0, the binary will be compatible with any version of the NVIDIA GPU driver newer that 375.26 (Dec 2016).
+
+Older versions of `nvcc` may require you to use an older version of `g++`.
+This can be explictly specified via the `CXX` variable, e.g.:
+```
+make NVCC=/playpen/jbakita/CUDA/cuda-archive/cuda-8.0/bin/nvcc CXX=g++-5 libsmctrl.a
+```
+
+`libsmctrl` supports being built as a shared library.
+This will require you to distribute `libsmctrl.so` with your compiled program.
+If you do not know what a shared library is, or why you would need to specify the path to `libsmctrl.so` in `LD_LIBRARY_PATH`, do not do this.
+To build as a shared library, replace `libsmctrl.a` with `libsmctrl.so` in the above commands.
+
+## Linking in Your Application
+If you have cloned and built `libsmctrl` in the folder `/playpen/libsmctrl` (replace this with the location you use):
+
+1. Add `-I/playpen/libsmctrl` to your compiler command (this allows `#include <libsmctrl.h>` in your C/C++ files).
+2. Add `-lsmctrl` to your linker command (this allows the linker to resolve the `libsmctrl` functions you use to the implementations in `libsmctrl.a` or `libsmctrl.so`).
+3. Add `-L/playpen/libsmctrl` to your linker command (this allows the linker to find `libsmctrl.a` or `libsmctrl.so`).
+4. (If not already included) add `-lcuda` to your linker command (this links against the CUDA driver library).
+
+Note that if you have compiled both `libsmctrl.a` (the static library) and `libsmctrl.so` (the shared library), most compilers will prefer the shared library.
+To statically link against `libsmctrl.a`, delete `libsmctrl.so`.
+
+For example, if you have a CUDA program written in `benchmark.cu` and have built `libsmctrl`, you can compile and link against `libsmctrl` via the following command:
+```
+nvcc benchmark.cu -o benchmark -I/playpen/libsmctl -lsmctrl -lcuda -L/playpen/libsmctrl
+```
+The resultant `benchmark` binary should be portable to any system with an equivalent or newer version of the NVIDIA GPU driver installed.
+
 ## Run Tests
 To test partitioning:
 ```
@@ -29,9 +75,17 @@ make tests
 ./libsmctrl_test_next_mask
 ```
 
+To test that high-granularity masks override low-granularity ones:
+```
+make tests
+./libsmctrl_test_stream_mask_override
+./libsmctrl_test_next_mask_override
+```
+
 And if `nvdebug` has been installed:
 ```
-./libsmctrl_test_gpu_info
+make tests
+./libsmctrl_test_gpc_info
 ```
 
 ## Supported GPUs

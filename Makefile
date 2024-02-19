@@ -1,4 +1,5 @@
 CC = gcc
+CXX = g++
 NVCC ?= nvcc
 # -fPIC is needed in all cases, as we may be linked into another shared library
 CFLAGS = -fPIC
@@ -18,22 +19,22 @@ libsmctrl_test_gpc_info: libsmctrl_test_gpc_info.c libsmctrl.a testbench.h
 	$(CC) $< -o $@ -g -L. -l:libsmctrl.a $(LDFLAGS)
 
 libsmctrl_test_mask_shared.o: libsmctrl_test_mask_shared.cu testbench.h
-	$(NVCC) $< -c -g
+	$(NVCC) -ccbin $(CXX) $< -c -g
 
 libsmctrl_test_global_mask: libsmctrl_test_global_mask.c libsmctrl.a libsmctrl_test_mask_shared.o
-	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+	$(NVCC) -ccbin $(CXX) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
 libsmctrl_test_stream_mask: libsmctrl_test_stream_mask.c libsmctrl.a libsmctrl_test_mask_shared.o
-	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+	$(NVCC) -ccbin $(CXX) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
 libsmctrl_test_stream_mask_override: libsmctrl_test_stream_mask_override.c libsmctrl.a libsmctrl_test_mask_shared.o
-	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+	$(NVCC) -ccbin $(CXX) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
 libsmctrl_test_next_mask: libsmctrl_test_next_mask.c libsmctrl.a libsmctrl_test_mask_shared.o
-	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+	$(NVCC) -ccbin $(CXX) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
 libsmctrl_test_next_mask_override: libsmctrl_test_next_mask_override.c libsmctrl.a libsmctrl_test_mask_shared.o
-	$(NVCC) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
+	$(NVCC) -ccbin $(CXX) $@.c -o $@ libsmctrl_test_mask_shared.o -g -L. -l:libsmctrl.a $(LDFLAGS)
 
 tests: libsmctrl_test_gpc_info libsmctrl_test_global_mask libsmctrl_test_stream_mask libsmctrl_test_stream_mask_override libsmctrl_test_next_mask libsmctrl_test_next_mask_override
 
