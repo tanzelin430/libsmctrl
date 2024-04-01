@@ -1,12 +1,13 @@
 import ctypes, ctypes.util
 import os
-
+import torch
+from typing import Optional
 # If this is failing, make sure that the directory containing libsmctrl.so is
 # in your LD_LIBRARY_PATH environment variable. You likely need something like:
 # LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/playpen/jbakita/gpu_subdiv/libsmctrl/
 libsmctrl_path = ctypes.util.find_library("libsmctrl")
 if not libsmctrl_path:
-    libsmctrl_path = __path__[0] + "/../libsmctrl.so"
+    libsmctrl_path = "../libsmctrl.so"
 libsmctrl = ctypes.CDLL(libsmctrl_path)
 
 def get_gpc_info(device_num):
@@ -80,3 +81,26 @@ def get_tpc_info_cuda(device_num):
         raise OSError(res, os.strerror(res))
     return num_tpcs.value
 
+def generate_mask(n: int, shift: Optional[int] = 0):
+    """
+    Generate a mask with n consecutive unset bits and a shift.
+
+    Parameters
+    ----------
+    n : int
+        The number of consecutive unset bits in the mask.
+    shift : int
+        The number of bits to shift the unset bits.
+
+    Returns
+    -------
+    int
+        The mask value with n consecutive unset bits and a shift.
+    """
+    mask = ~(int('1' * n, 2) << shift)
+    return mask
+
+def set_stream_mask(torch_stream: torch.cuda.Stream , mask):
+    # original c function prototype:extern void libsmctrl_set_stream_mask(void* stream, uint64_t mask);
+    stream_ptr = ctypes.c_void_p(torch_stream.cuda_stream)
+    libsmctrl.libsmctrl_set_stream_mask(stream_ptr, ctypes.c_uint64(mask))
