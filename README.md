@@ -1,5 +1,7 @@
 # libsmctrl: Quick & Easy Hardware Compute Partitioning on NVIDIA GPUs
-
+## tanzelin Remark
+如果想要看本人包装的py接口的使用，请详参：https://github.com/tanzelin430/vllm/blob/chunkedPrefill/benchmarks/benchmark_smctrl.py
+## main
 This library was developed as part of the following paper:
 
 _J. Bakita and J. H. Anderson, "Hardware Compute Partitioning on NVIDIA GPUs", Proceedings of the 29th IEEE Real-Time and Embedded Technology and Applications Symposium, pp. 54-66, May 2023._
